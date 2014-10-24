@@ -1,0 +1,146 @@
+#!/usr/bin/expect --
+
+set selfPath [file dirname [info script]]
+
+# Usage
+set usageString \
+{automator   version: 1.0    author:  Chenggang Tang(OItisTang@gmail.com)
+
+A light wrapper of expect that makes expect more handy.
+It reads and translates lines from a file into expect commands.
+
+Usage:
+    <file> Execute automator script.
+    -h     Print this help message.
+    -e     Print command file example.
+
+Example:
+    automator -h
+    automator -e | tee example.atm
+    automator work.atm; or
+    chmod +x work.atm; ./work.atm
+
+}
+
+
+# if no arg, print help message
+if {$argc != 1 || $argv == "-h"} {
+    puts $usageString
+    return 0
+} elseif {$argv == "-e"} {
+    set exampleFile [open "$selfPath/example.atm"]
+    while {[gets $exampleFile line] >= 0} {
+        puts $line
+    }
+    puts ""
+    close $exampleFile
+    return 0
+} else {
+    if [catch {open $argv r} res] {
+        puts "automator:\n  $res!"
+        return 1
+    } else {
+        set inputFd $res
+    }
+}
+
+
+# include functions
+source $selfPath/include/parseLine.exp.inc
+source $selfPath/include/log.exp.inc
+
+
+# published values, set default value
+set timeout 10
+set inputDelay 0
+set dbgLogFlag 0
+set errLogFlag 0
+set thisFile $inputFd
+
+
+# init log settings
+setDbgLogFlag $dbgLogFlag
+setErrLogFlag $errLogFlag
+
+
+# execute command file
+for {set lastInput ""} {true} {} {
+    
+    if {![parseLine $inputFd type option value]} {
+        break
+    }
+    
+    if {$type == "#"} {
+        continue
+    } elseif {$type == "!"} {
+        eval $value
+        
+        # allow dynamic log settings
+        setDbgLogFlag $dbgLogFlag
+        setErrLogFlag $errLogFlag
+    } elseif {$type == ">"} {
+        set matchScheme "-$option"
+        if {$value == ""} {
+            set out "*"
+        } else {
+            set out $value
+        }
+        
+        expect {
+            $matchScheme "$out" {
+                # flush expect's internal buffer
+                expect *
+                
+                continue
+            }
+            timeout {
+                # flush expect's internal buffer
+                expect $lastInput; expect *
+                
+                dbgLog ""
+                dbgLog "--------------------------------"
+                dbgLog "Fail: TIMEOUT expecting:"
+                dbgLog "      $matchScheme \"$out\""
+                dbgLog "--------------------------------"
+                
+                errLog ""
+                errLog "==fail==========================="
+                errLog "last input: \"$lastInput\""
+                errLog "TIMEOUT expecting: $matchScheme \"$out\""
+                errLog "but we got the following:"
+                errLog "---------------------------------"
+                errLog "$expect_out(0,string)"
+                errLog "================================="
+                errLog ""
+                
+                continue
+            }
+        }
+    } elseif {$type == "<"} {
+        set cmd $value
+        set lastInput $value
+        
+        if {$option == "newline"} {
+            exp_send "$cmd\r"
+            
+            # flush expect's internal buffer
+            expect "$cmd"
+            expect "\n"
+        } elseif {$option == "exact"} {
+            exp_send "$cmd"
+            
+            # flush expect's internal buffer
+            expect "$cmd"
+        } elseif {$option == "passwd"} {
+            exp_send "$cmd\r"
+            
+            # flush expect's internal buffer
+            expect "\n"
+        }
+        
+        # sleep a while
+        if {$inputDelay > 0} {
+            after $inputDelay
+        }
+    }
+}

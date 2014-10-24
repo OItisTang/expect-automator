@@ -1,0 +1,62 @@
+#!/usr/bin/env automator
+
+############################################################
+# This is an automator command file example
+#
+# Syntax:
+#   '#' comment
+#   '!' will be executed as expect command
+#   '>' expected output
+#       '>glob>'    use "glob" matching scheme,
+#                     default, same as '>'
+#       '>exact>'   use "exact" matching scheme
+#       '>regex>'   use "regex" matching scheme
+#   '<' input which will be sent to target
+#       '<newline<' a '\n' will be appended,
+#                     default, same as '<'
+#       '<exact<'   keep the following untouched
+#       '<passwd<'  same as '<newline<' but do not expect
+#                     the input been echoed back
+#                     used when asking for password
+#   (no prefix)     same as '<'
+############################################################
+
+# [mandatory] spawn a process
+! spawn telnet 10.0.0.1
+
+# [optional] set expect time out (second), -1 means forever, default=10
+! set timeout 10
+
+# [optional] set the delay after an input (millisecond), default=0
+! set inputDelay 0
+
+# [optional] set the screen logs, 0 = off, 1 = on, default=0
+! set dbgLogFlag 0
+! set errLogFlag 0
+
+# "thisFile" is the file descriptor of this script file
+# can be used to hack, see following "for loop example"
+
+# expected outputs & inputs to be sent
+> *abc*
+>glob> *abc*
+>exact> abcdef
+>regexp> .*c*.ef
+
+echo hello
+< echo aaa
+<newline< echo aaa
+<exact< y
+<passwd< root123
+
+# for loop example
+# loop start
+! set loopCount 5
+! set loopEntry [tell $thisFile]
+
+< echo abcde
+> abcde
+
+! incr loopCount -1
+! if {$loopCount > 0} { seek $thisFile $loopEntry }
+# loop end
